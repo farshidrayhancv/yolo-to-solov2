@@ -159,6 +159,8 @@ graph TB
 - ✅ **4 Model Sizes**: Nano (fastest) → Large (most accurate)
 - ✅ **Auto Conversion**: YOLO → COCO format conversion built-in
 - ✅ **Pre-trained Backbones**: ImageNet pre-trained ResNet models
+- ✅ **Ultralytics-style Augmentations**: Mosaic, MixUp, HSV, affine transforms
+- ✅ **Automatic LR Scheduling**: Warmup + Cosine annealing
 - ✅ **Easy CLI**: Simple command-line interface
 
 ## Quick Start
@@ -239,6 +241,8 @@ Label format: `class_id x1 y1 x2 y2 x3 y3 ...` (normalized 0-1)
 
 ## CLI Arguments
 
+### Basic Training
+
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `--data` | required | Path to data.yaml |
@@ -249,6 +253,24 @@ Label format: `class_id x1 y1 x2 y2 x3 y3 ...` (normalized 0-1)
 | `--lr` | 0.01 | Learning rate |
 | `--work-dir` | auto | Output directory |
 | `--skip-conversion` | false | Skip YOLO→COCO conversion |
+
+### Data Augmentation (Ultralytics-style)
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--mosaic` | 1.0 | Mosaic augmentation probability |
+| `--mixup` | 0.1 | MixUp augmentation probability |
+| `--hsv-h` | 0.015 | HSV hue augmentation (0-1) |
+| `--hsv-s` | 0.7 | HSV saturation augmentation (0-1) |
+| `--hsv-v` | 0.4 | HSV value/brightness augmentation (0-1) |
+| `--degrees` | 10.0 | Random rotation (±degrees) |
+| `--translate` | 0.1 | Random translation (±fraction) |
+| `--scale` | 0.5 | Random scale range (±fraction) |
+| `--shear` | 2.0 | Random shear (±degrees) |
+| `--fliplr` | 0.5 | Horizontal flip probability |
+| `--flipud` | 0.0 | Vertical flip probability |
+
+**Disable augmentations:** Set probability to 0 (e.g., `--mosaic 0 --mixup 0`)
 
 ## Performance
 

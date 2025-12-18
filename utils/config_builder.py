@@ -22,7 +22,18 @@ def build_mmdet_config(
     momentum=0.937,
     weight_decay=0.0005,
     warmup_epochs=3,
-    work_dir=None
+    work_dir=None,
+    mosaic_prob=1.0,
+    mixup_prob=0.1,
+    hsv_h=0.015,
+    hsv_s=0.7,
+    hsv_v=0.4,
+    degrees=10.0,
+    translate=0.1,
+    scale=0.5,
+    shear=2.0,
+    flipud=0.0,
+    fliplr=0.5
 ):
     """
     Build MMDetection config file content
@@ -135,8 +146,46 @@ backend_args = None
 train_pipeline = [
     dict(type='LoadImageFromFile', backend_args=backend_args),
     dict(type='LoadAnnotations', with_bbox=True, with_mask=True),
-    dict(type='Resize', scale=img_scale, keep_ratio=True),
-    dict(type='RandomFlip', prob=0.5),
+    # Mosaic augmentation (4-image mixing)
+    dict(
+        type='Mosaic',
+        img_scale=img_scale,
+        pad_val=114.0,
+        prob={mosaic_prob}),
+    # Random affine transformation
+    dict(
+        type='RandomAffine',
+        max_rotate_degree={degrees},
+        max_translate_ratio={translate},
+        scaling_ratio_range=({1 - scale}, {1 + scale}),
+        max_shear_degree={shear},
+        border=(-img_scale[0] // 2, -img_scale[1] // 2)),
+    # MixUp augmentation
+    dict(type='MixUp', img_scale=img_scale, ratio_range=(0.8, 1.6), pad_val=114.0, prob={mixup_prob}),
+    # Color augmentation (HSV, brightness, contrast)
+    dict(
+        type='PhotoMetricDistortion',
+        brightness_delta=int(255 * {hsv_v}),
+        contrast_range=(1 - {hsv_v}, 1 + {hsv_v}),
+        saturation_range=(1 - {hsv_s}, 1 + {hsv_s}),
+        hue_delta=int(180 * {hsv_h})),
+    # Resize with scale jitter
+    dict(
+        type='Resize',
+        scale=img_scale,
+        keep_ratio=True),
+    # Random crop
+    dict(
+        type='RandomCrop',
+        crop_size=(int(img_scale[0] * 0.9), int(img_scale[1] * 0.9)),
+        crop_type='absolute',
+        allow_negative_crop=True),
+    # Resize back to target size
+    dict(type='Resize', scale=img_scale, keep_ratio=False),
+    # Random flip (horizontal)
+    dict(type='RandomFlip', prob={fliplr}, direction='horizontal'),
+    # Random flip (vertical)
+    dict(type='RandomFlip', prob={flipud}, direction='vertical'),
     dict(type='PackDetInputs')
 ]
 

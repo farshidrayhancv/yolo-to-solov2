@@ -54,6 +54,17 @@ Examples:
     parser.add_argument('--momentum', type=float, default=0.937, help='SGD momentum (default: 0.937)')
     parser.add_argument('--weight-decay', type=float, default=0.0005, help='Weight decay (default: 0.0005)')
     parser.add_argument('--warmup-epochs', type=int, default=3, help='Warmup epochs (default: 3)')
+    parser.add_argument('--mosaic', type=float, default=1.0, help='Mosaic augmentation probability (default: 1.0)')
+    parser.add_argument('--mixup', type=float, default=0.1, help='MixUp augmentation probability (default: 0.1)')
+    parser.add_argument('--hsv-h', type=float, default=0.015, help='HSV hue augmentation (default: 0.015)')
+    parser.add_argument('--hsv-s', type=float, default=0.7, help='HSV saturation augmentation (default: 0.7)')
+    parser.add_argument('--hsv-v', type=float, default=0.4, help='HSV value augmentation (default: 0.4)')
+    parser.add_argument('--degrees', type=float, default=10.0, help='Random rotation degrees (default: 10.0)')
+    parser.add_argument('--translate', type=float, default=0.1, help='Random translate ratio (default: 0.1)')
+    parser.add_argument('--scale', type=float, default=0.5, help='Random scale range (+/- default: 0.5)')
+    parser.add_argument('--shear', type=float, default=2.0, help='Random shear degrees (default: 2.0)')
+    parser.add_argument('--flipud', type=float, default=0.0, help='Vertical flip probability (default: 0.0)')
+    parser.add_argument('--fliplr', type=float, default=0.5, help='Horizontal flip probability (default: 0.5)')
     parser.add_argument('--work-dir', type=str, default=None, help='Working directory for outputs')
     parser.add_argument('--skip-conversion', action='store_true', help='Skip dataset conversion (use if already converted)')
     parser.add_argument('--list-models', action='store_true', help='List available model sizes and exit')
@@ -135,7 +146,18 @@ def main():
         momentum=args.momentum,
         weight_decay=args.weight_decay,
         warmup_epochs=args.warmup_epochs,
-        work_dir=args.work_dir
+        work_dir=args.work_dir,
+        mosaic_prob=args.mosaic,
+        mixup_prob=args.mixup,
+        hsv_h=args.hsv_h,
+        hsv_s=args.hsv_s,
+        hsv_v=args.hsv_v,
+        degrees=args.degrees,
+        translate=args.translate,
+        scale=args.scale,
+        shear=args.shear,
+        flipud=args.flipud,
+        fliplr=args.fliplr
     )
 
     # Save config file
