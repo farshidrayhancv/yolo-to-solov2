@@ -58,6 +58,22 @@ graph TB
 
 ### Installation
 
+**Option 1: Using uv (Recommended - Fast & Reproducible)**
+
+```bash
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and install dependencies
+cd yolo-to-solov2
+uv sync
+
+# Run training
+uv run python train.py --data /path/to/data.yaml
+```
+
+**Option 2: Using conda**
+
 ```bash
 conda create -n solov2 python=3.11
 conda activate solov2

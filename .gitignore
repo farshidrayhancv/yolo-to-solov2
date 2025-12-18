@@ -33,6 +33,7 @@ solov2_*_training.py
 venv/
 env/
 ENV/
+.venv/
 
 # IDE
 .vscode/
