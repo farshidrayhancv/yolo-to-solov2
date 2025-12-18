@@ -4,6 +4,8 @@ Train SOLOv2 instance segmentation models using your existing YOLO format datase
 
 ## Architecture
 
+### Training Pipeline
+
 ```mermaid
 graph TB
     subgraph Input["Input: YOLO Dataset"]
@@ -43,6 +45,111 @@ graph TB
 
     style Input fill:#e1f5ff
     style Model fill:#fff4e1
+    style Output fill:#e8f5e9
+```
+
+### SOLOv2 Internal Architecture
+
+```mermaid
+graph TB
+    subgraph Input["Input"]
+        IMG[Image<br/>H×W×3]
+    end
+
+    subgraph Backbone["ResNet Backbone"]
+        direction TB
+        C1[Conv1<br/>7×7, stride=2]
+        C2[Stage 2<br/>C2: H/4×W/4]
+        C3[Stage 3<br/>C3: H/8×W/8]
+        C4[Stage 4<br/>C4: H/16×W/16]
+        C5[Stage 5<br/>C5: H/32×W/32]
+
+        C1 --> C2
+        C2 --> C3
+        C3 --> C4
+        C4 --> C5
+    end
+
+    subgraph FPN["Feature Pyramid Network"]
+        direction TB
+        P2[P2: H/4×W/4<br/>256 channels]
+        P3[P3: H/8×W/8<br/>256 channels]
+        P4[P4: H/16×W/16<br/>256 channels]
+        P5[P5: H/32×W/32<br/>256 channels]
+        P6[P6: H/64×W/64<br/>256 channels]
+    end
+
+    subgraph Head["SOLOv2 Head"]
+        direction TB
+
+        subgraph Category["Category Branch"]
+            CAT1[Conv Stack<br/>4 layers]
+            CAT2[Grid System<br/>S×S cells]
+            CAT3[Classification<br/>num_classes]
+        end
+
+        subgraph Mask["Mask Branch"]
+            MASK1[Conv Stack<br/>4 layers]
+            MASK2[Mask Features<br/>E channels]
+            MASK3[Kernel Prediction<br/>S×S×E]
+        end
+
+        subgraph MaskFeat["Mask Feature Head"]
+            MF1[Multi-level Features<br/>P2→P3→P4]
+            MF2[Feature Fusion<br/>128 channels]
+            MF3[Mask Prototype<br/>H/4×W/4×E]
+        end
+    end
+
+    subgraph Output["Output"]
+        direction TB
+        OUT1[Category Scores<br/>S×S×num_classes]
+        OUT2[Instance Masks<br/>N×H×W]
+        OUT3[Final Predictions<br/>Class + Mask per instance]
+    end
+
+    IMG --> C1
+
+    C2 --> P2
+    C3 --> P3
+    C4 --> P4
+    C5 --> P5
+    P5 --> P6
+
+    P2 --> Category
+    P3 --> Category
+    P4 --> Category
+    P5 --> Category
+
+    P2 --> Mask
+    P3 --> Mask
+    P4 --> Mask
+    P5 --> Mask
+
+    P2 --> MaskFeat
+    P3 --> MaskFeat
+    P4 --> MaskFeat
+
+    CAT1 --> CAT2
+    CAT2 --> CAT3
+    CAT3 --> OUT1
+
+    MASK1 --> MASK2
+    MASK2 --> MASK3
+
+    MF1 --> MF2
+    MF2 --> MF3
+
+    MASK3 --> OUT2
+    MF3 --> OUT2
+
+    OUT1 --> OUT3
+    OUT2 --> OUT3
+
+    style Input fill:#e1f5ff
+    style Backbone fill:#fff4e1
+    style FPN fill:#ffe1f5
+    style Head fill:#e1ffe1
     style Output fill:#e8f5e9
 ```
 
