@@ -20,6 +20,12 @@ wheels/
 .installed.cfg
 *.egg
 
+# Media files
+*.mp4
+*.avi
+*.png
+
+
 # Training outputs
 work_dirs/
 *.log
@@ -45,3 +51,8 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# misc
+AUGMENTATION_FINAL_CONFIG.md
+AUGMENTATION_TEST_PLAN.md
+MOSAIC_INTEGRATION.md

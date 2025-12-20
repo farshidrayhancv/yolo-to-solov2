@@ -43,12 +43,12 @@ Examples:
     parser.add_argument(
         '--model',
         type=str,
-        default='medium',
+        default='nano',
         choices=['nano', 'small', 'medium', 'large'],
         help='Model size (default: medium)'
     )
     parser.add_argument('--epochs', type=int, default=150, help='Number of training epochs (default: 150)')
-    parser.add_argument('--batch', type=int, default=None, help='Batch size (default: auto based on model size)')
+    parser.add_argument('--batch', type=int, default=5, help='Batch size (default: auto based on model size)')
     parser.add_argument('--imgsz', type=int, default=1280, help='Image size (default: 1280)')
     parser.add_argument('--lr', type=float, default=0.01, help='Learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.937, help='SGD momentum (default: 0.937)')
@@ -187,13 +187,22 @@ def main():
 
     # Run training
     try:
+        # Set PYTHONPATH to include project directory for custom modules
+        env = os.environ.copy()
+        project_dir = str(Path(__file__).parent)
+        if 'PYTHONPATH' in env:
+            env['PYTHONPATH'] = f"{project_dir}:{env['PYTHONPATH']}"
+        else:
+            env['PYTHONPATH'] = project_dir
+
         with open(log_file, 'w') as log:
             process = subprocess.Popen(
                 train_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 universal_newlines=True,
-                bufsize=1
+                bufsize=1,
+                env=env
             )
 
             # Stream output to both console and log file
