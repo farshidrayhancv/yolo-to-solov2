@@ -2,6 +2,157 @@
 
 Train SOLOv2 instance segmentation models using your existing YOLO format datasets with **Ultralytics-matched augmentations and learning rate schedule**.
 
+## Architecture
+
+### Training Pipeline
+
+```mermaid
+graph TB
+    subgraph Input["Input: YOLO Dataset"]
+        A[YOLO Format<br/>Normalized Polygons]
+    end
+
+    subgraph Conversion["Automatic Conversion"]
+        B[Dataset Converter<br/>YOLO → COCO]
+    end
+
+    subgraph Model["SOLOv2 Architecture"]
+        direction TB
+        C[Backbone<br/>ResNet 18/34/50/101<br/>ImageNet Pretrained]
+        D[Neck<br/>FPN<br/>Multi-scale Features]
+        E[SOLOv2 Head<br/>Category Branch<br/>Mask Branch]
+
+        C --> D
+        D --> E
+    end
+
+    subgraph Training["Training"]
+        F[Losses<br/>Focal Loss + Dice Loss]
+        G[Optimizer<br/>SGD + Cosine LR]
+    end
+
+    subgraph Output["Output"]
+        H[Trained Model<br/>.pth checkpoints]
+        I[Metrics<br/>mAP, mAP50, mAP75]
+    end
+
+    A --> B
+    B --> C
+    E --> F
+    F --> G
+    G --> H
+    G --> I
+
+    style Input fill:#e1f5ff
+    style Model fill:#fff4e1
+    style Output fill:#e8f5e9
+```
+
+### SOLOv2 Internal Architecture
+
+```mermaid
+graph TB
+    subgraph Input["Input"]
+        IMG[Image<br/>H×W×3]
+    end
+
+    subgraph Backbone["ResNet Backbone"]
+        direction TB
+        C1[Conv1<br/>7×7, stride=2]
+        C2[Stage 2<br/>C2: H/4×W/4]
+        C3[Stage 3<br/>C3: H/8×W/8]
+        C4[Stage 4<br/>C4: H/16×W/16]
+        C5[Stage 5<br/>C5: H/32×W/32]
+
+        C1 --> C2
+        C2 --> C3
+        C3 --> C4
+        C4 --> C5
+    end
+
+    subgraph FPN["Feature Pyramid Network"]
+        direction TB
+        P2[P2: H/4×W/4<br/>256 channels]
+        P3[P3: H/8×W/8<br/>256 channels]
+        P4[P4: H/16×W/16<br/>256 channels]
+        P5[P5: H/32×W/32<br/>256 channels]
+        P6[P6: H/64×W/64<br/>256 channels]
+    end
+
+    subgraph Head["SOLOv2 Head"]
+        direction TB
+
+        subgraph Category["Category Branch"]
+            CAT1[Conv Stack<br/>4 layers]
+            CAT2[Grid System<br/>S×S cells]
+            CAT3[Classification<br/>num_classes]
+        end
+
+        subgraph Mask["Mask Branch"]
+            MASK1[Conv Stack<br/>4 layers]
+            MASK2[Mask Features<br/>E channels]
+            MASK3[Kernel Prediction<br/>S×S×E]
+        end
+
+        subgraph MaskFeat["Mask Feature Head"]
+            MF1[Multi-level Features<br/>P2→P3→P4]
+            MF2[Feature Fusion<br/>128 channels]
+            MF3[Mask Prototype<br/>H/4×W/4×E]
+        end
+    end
+
+    subgraph Output["Output"]
+        direction TB
+        OUT1[Category Scores<br/>S×S×num_classes]
+        OUT2[Instance Masks<br/>N×H×W]
+        OUT3[Final Predictions<br/>Class + Mask per instance]
+    end
+
+    IMG --> C1
+
+    C2 --> P2
+    C3 --> P3
+    C4 --> P4
+    C5 --> P5
+    P5 --> P6
+
+    P2 --> Category
+    P3 --> Category
+    P4 --> Category
+    P5 --> Category
+
+    P2 --> Mask
+    P3 --> Mask
+    P4 --> Mask
+    P5 --> Mask
+
+    P2 --> MaskFeat
+    P3 --> MaskFeat
+    P4 --> MaskFeat
+
+    CAT1 --> CAT2
+    CAT2 --> CAT3
+    CAT3 --> OUT1
+
+    MASK1 --> MASK2
+    MASK2 --> MASK3
+
+    MF1 --> MF2
+    MF2 --> MF3
+
+    MASK3 --> OUT2
+    MF3 --> OUT2
+
+    OUT1 --> OUT3
+    OUT2 --> OUT3
+
+    style Input fill:#e1f5ff
+    style Backbone fill:#fff4e1
+    style FPN fill:#ffe1f5
+    style Head fill:#e1ffe1
+    style Output fill:#e8f5e9
+```
+
 ## Features
 
 - ✅ **Drop-in Replacement**: Use YOLO format datasets directly
@@ -20,7 +171,7 @@ Train SOLOv2 instance segmentation models using your existing YOLO format datase
   - **Affine**: Rotation, translation ±10%, scale 0.5-1.5x
   - **Random brightness/contrast**: ±0.2 each
   - **Flips**: Horizontal (50%) and vertical (configurable)
-- ✅ **Production Ready**:
+- ✅ **Training Features**:
   - Best model checkpointing based on validation mAP
   - TensorBoard logging for training visualization
   - Multiprocessing data loading (4 workers)
@@ -65,29 +216,57 @@ python train.py --list-models
 
 ## Performance
 
-Tested on Lingfield Racetrack dataset (217 train, 99 val images, 3 classes) with **identical training configuration** (150 epochs, 1280px, batch 10, matched augmentations and LR schedule):
+### COCO Benchmark (Official Results)
 
-### Final Results (Epoch 150)
+SOLOv2 official performance on COCO val2017 (80 classes, 5000 images):
+
+| Model | Backbone | mAP | mAP50 | mAP75 | Params | FPS |
+|-------|----------|-----|-------|-------|--------|-----|
+| SOLOv2-Light | ResNet18 | 29.6 | 47.3 | 31.3 | 24.9M | - |
+| SOLOv2 | ResNet50 | 34.8 | 55.5 | 37.2 | 46.1M | 12.1 |
+| SOLOv2 | ResNet101 | 37.1 | 58.3 | 39.6 | 65.0M | 9.9 |
+
+### Custom Dataset Results (Lingfield Racetrack)
+
+Tested on 217 train, 99 val images, 3 classes (grass track, jumps, track) with **identical training configuration** (150 epochs, 1280px, matched augmentations and LR schedule):
+
+#### Final Results (Epoch 150)
 
 | Model | mAP50 | mAP50-95 | Params | Training Time |
 |-------|-------|----------|--------|---------------|
-| **YOLOv11n-seg** | 94.5% | **62.0%** | 2.9M | ~7 hours |
+| **YOLOv11n-seg** | 94.5% | **62.0%** | 2.9M | ~12 minutes |
 | **SOLOv2-NANO** | **95.0%** | **75.5%** | 11.2M | ~40 minutes |
 
 **SOLOv2 achieves 13.5% higher mAP50-95** with proper training configuration!
 
-### Key Findings
+#### Detailed Metrics (Epoch 150)
 
-#### The Importance of Learning Rate Schedule
+**SOLOv2-NANO:**
+- mAP@50-95: **75.5%**
+- mAP@50: **95.0%**
+- mAP@75: **88.9%**
+- Recall: **82.6%**
+- Final loss: 0.251
+- Gradient norm: 3.16 (stable)
 
-The original comparison showed SOLOv2 at 26.8% mAP vs YOLO's 62% due to **incorrect learning rate configuration**:
+**YOLOv11n-seg:**
+- mAP@50-95: 62.0%
+- mAP@50: 94.5%
+- mAP@75: ~80% (estimated)
+- Recall: ~85%
+
+### The Importance of Learning Rate Schedule
+
+The key to SOLOv2's success is using **YOLO's auto optimizer formula** instead of a naive learning rate:
 
 | Configuration | Peak LR | Warmup | Result |
 |---------------|---------|--------|--------|
 | **Incorrect** | 0.01 | 3 epochs (0.1% → 100%) | 26.8% mAP50-95 (gradient explosion) |
 | **Correct** | 0.001429 | 7 epochs (2% → 100%) | **75.5% mAP50-95** (stable training) |
 
-**YOLO's auto optimizer formula**: For 3 classes, `lr = 0.002 * 5 / (4 + 3) = 0.001429`
+**YOLO's auto optimizer formula**: `lr = 0.002 * 5 / (4 + num_classes)`
+
+For 3 classes: `lr = 0.002 * 5 / (4 + 3) = 0.001429`
 
 Using the naive 0.01 LR caused:
 - Gradient norm of 668 in epoch 2 (explosion!)
@@ -115,9 +294,11 @@ With the correct formula-based LR (0.001429):
 - Separate category and mask branches allow specialized feature learning
 - Mask feature head with multi-level fusion (P2→P3→P4)
 
-### Training Configuration
+### Ultralytics Compatibility
 
-**Matched settings for fair comparison:**
+This implementation matches Ultralytics YOLO's training recipe for fair comparison:
+
+**Matched Configuration:**
 
 ```yaml
 # Learning Rate (CRITICAL)
@@ -145,22 +326,6 @@ optimizer: SGD
 momentum: 0.937
 weight_decay: 0.0005
 ```
-
-### Detailed Metrics (Epoch 150)
-
-**SOLOv2-NANO:**
-- mAP@50-95: **75.5%**
-- mAP@50: **95.0%**
-- mAP@75: **88.9%**
-- Recall: **82.6%**
-- Final loss: 0.251
-- Gradient norm: 3.16 (stable)
-
-**YOLOv11n-seg:**
-- mAP@50-95: 62.0%
-- mAP@50: 94.5%
-- mAP@75: ~80% (estimated)
-- Recall: ~85%
 
 ## Dataset Format
 
@@ -238,39 +403,6 @@ python train.py --data data.yaml --batch 2 --imgsz 896
 ```bash
 tensorboard --logdir=work_dirs/solov2_nano
 ```
-
-## Architecture
-
-### SOLOv2 Overview
-
-```
-Input Image (H×W×3)
-    ↓
-ResNet Backbone (ImageNet pretrained)
-├── Stage 2: C2 (H/4×W/4)
-├── Stage 3: C3 (H/8×W/8)
-├── Stage 4: C4 (H/16×W/16)
-└── Stage 5: C5 (H/32×W/32)
-    ↓
-FPN Neck (Multi-scale Features)
-├── P2 (H/4×W/4) ──┐
-├── P3 (H/8×W/8) ──┼─→ Mask Feature Head
-├── P4 (H/16×W/16) ┘      ↓
-├── P5 (H/32×W/32)    Mask Prototypes (H/4×W/4×E)
-└── P6 (H/64×W/64)
-    ↓                     ↓
-SOLOv2 Head          Mask Prediction
-├── Category Branch: S×S grid × num_classes
-└── Mask Branch: S×S grid × E kernels
-                          ↓
-              Final Masks: N instances × H×W
-```
-
-**Key Components:**
-- **Grid System**: Image divided into S×S cells (5 scales: 40, 36, 24, 16, 12)
-- **Decoupled Heads**: Separate branches for classification and mask generation
-- **Mask Feature Head**: Multi-level feature fusion for high-quality masks
-- **Dynamic Kernels**: Each instance gets unique convolutional kernel weights
 
 ## Citation
 
