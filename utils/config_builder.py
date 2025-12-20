@@ -27,14 +27,14 @@ def build_mmdet_config(
     warmup_epochs=3,
     work_dir=None,
     mosaic_prob=1.0,
-    mixup_prob=0.1,
+    mixup_prob=0.0,  # Changed: YOLOv11n doesn't use mixup
     hsv_h=0.015,
     hsv_s=0.7,
     hsv_v=0.4,
-    degrees=10.0,
+    degrees=0.0,  # Changed: YOLOv11n doesn't use rotation
     translate=0.1,
     scale=0.5,
-    shear=2.0,
+    shear=0.0,  # Changed: YOLOv11n doesn't use shear
     flipud=0.0,
     fliplr=0.5
 ):
@@ -354,33 +354,53 @@ test_evaluator = val_evaluator
 max_epochs = {epochs}
 train_cfg = dict(max_epochs=max_epochs, val_interval=10)
 
-# Optimizer
+# Optimizer - CRITICAL: Use YOLO's AUTO learning rate formula!
+# When optimizer='auto', YOLO uses: lr = 0.002 * 5 / (4 + num_classes)
+# For {num_classes} classes: lr = 0.01 / (4 + {num_classes}) = {round(0.01 / (4 + num_classes), 6)}
+actual_peak_lr = round(0.002 * 5 / (4 + {num_classes}), 6)  # YOLO's auto LR formula
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(type='SGD', lr={lr}, momentum={momentum}, weight_decay={weight_decay}),
+    optimizer=dict(type='SGD', lr=actual_peak_lr, momentum={momentum}, weight_decay={weight_decay}),
     clip_grad=dict(max_norm=35, norm_type=2))
 
-# Learning rate scheduler with warmup
+# Learning rate scheduler matching YOLO Nano's ACTUAL behavior from train36:
+# Warmup: 7 epochs from 2% to 100% of peak (0.0002 -> 0.00137)
+# Then: Cosine decay from epoch 8 to 150 down to 1.7% (0.000024)
 param_scheduler = [
     dict(
         type='LinearLR',
-        start_factor=0.001,
+        start_factor=0.02,  # Start at 2% (0.0002)
         by_epoch=True,
         begin=0,
-        end={warmup_epochs}),
+        end=7),  # 7 epochs warmup (matches YOLO exactly)
     dict(
         type='CosineAnnealingLR',
-        T_max=max_epochs - {warmup_epochs},
-        eta_min={lr * 0.01},
-        begin={warmup_epochs},
+        T_max=max_epochs - 7,
+        eta_min=actual_peak_lr * 0.017,  # End at 1.7% of peak (matches YOLO)
+        begin=7,
         end=max_epochs,
         by_epoch=True)
 ]
 
 # Default hooks
 default_hooks = dict(
-    checkpoint=dict(type='CheckpointHook', interval=10, max_keep_ckpts=3),
+    checkpoint=dict(
+        type='CheckpointHook',
+        interval=10,
+        max_keep_ckpts=3,
+        save_best='coco/segm_mAP',  # Save best model based on mask mAP
+        rule='greater'),  # Higher mAP is better
     logger=dict(type='LoggerHook', interval=10))
+
+# Visualizer with TensorBoard backend
+vis_backends = [
+    dict(type='LocalVisBackend'),
+    dict(type='TensorboardVisBackend')
+]
+visualizer = dict(
+    type='DetLocalVisualizer',
+    vis_backends=vis_backends,
+    name='visualizer')
 
 # Auto-scale learning rate based on batch size (matches Ultralytics behavior)
 auto_scale_lr = dict(
