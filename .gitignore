@@ -7,6 +7,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+*.sh
 
 # Virtual environments
 .venv/
@@ -22,6 +23,11 @@ work_dirs/
 
 # Dataset conversions
 *_coco/
+
+# Inference outputs
+inference_outputs/
+*.mp4
+
 
 # IDE
 .vscode/

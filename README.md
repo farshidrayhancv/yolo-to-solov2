@@ -12,6 +12,23 @@ Detailed architecture diagrams and comparisons for all three models:
 - **RTMDet-Ins**: One-stage with CSPNeXt backbone - best overall
 - **YOLOv11-seg**: Prototype-based - best for speed
 
+## 🎥 Video Inference
+
+Run inference on videos with trained models:
+
+**👉 [View Complete Inference Guide →](INFERENCE.md)**
+
+Quick start:
+```bash
+# Single video
+python inference.py --video video.mp4 --model work_dirs/solov2_nano/best.pth --type solov2
+
+# Batch processing (2 videos × 2 models = 4 outputs)
+./test_inference.sh
+```
+
+Output format: **Original | Colored Mask | Overlay** (3 views side-by-side)
+
 ## Features
 
 - ✅ **Two Architectures**: Choose between SOLOv2 (ResNet backbone) or RTMDet-Ins (CSPNeXt backbone)
