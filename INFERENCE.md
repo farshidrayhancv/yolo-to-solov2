@@ -44,9 +44,9 @@ Each output video contains **3 views side-by-side**:
 
 - **Left**: Original RGB frame
 - **Middle**: Color-coded segmentation mask
-  - 🟢 Green: Grass track
-  - 🔵 Blue: Jumps
-  - 🔴 Red: Track
+  - Colors are automatically assigned per class using Supervision's ColorPalette
+  - Each class gets a unique, consistent color across all frames
+  - Works with any number of classes (not limited to 3)
 - **Right**: Original frame with mask overlay (50% transparency)
 
 ---
