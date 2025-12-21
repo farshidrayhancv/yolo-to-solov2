@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 from utils.dataset_converter import convert_yolo_to_coco
-from utils.config_builder import build_mmdet_config
+from utils.config_builder import build_mmdet_config, build_rtmdet_ins_config
 from configs.model_configs import list_available_models
 
 
@@ -25,14 +25,17 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Train with default settings (medium model)
+  # Train SOLOv2 with default settings (nano model)
   python train.py --data /path/to/data.yaml
 
+  # Train RTMDet-Ins with tiny model
+  python train.py --data /path/to/data.yaml --architecture rtmdet-ins --model tiny
+
   # Train with specific model size
-  python train.py --data /path/to/data.yaml --model medium
+  python train.py --data /path/to/data.yaml --architecture solov2 --model medium
 
   # Train with custom settings
-  python train.py --data /path/to/data.yaml --model small --epochs 200 --imgsz 1280 --batch 8
+  python train.py --data /path/to/data.yaml --architecture rtmdet-ins --model small --epochs 200 --imgsz 640 --batch 8
 
   # List available model sizes
   python train.py --list-models
@@ -41,11 +44,18 @@ Examples:
 
     parser.add_argument('--data', type=str, help='Path to data.yaml file (Ultralytics format)')
     parser.add_argument(
+        '--architecture',
+        type=str,
+        default='solov2',
+        choices=['solov2', 'rtmdet-ins'],
+        help='Architecture to use: solov2 or rtmdet-ins (default: solov2)'
+    )
+    parser.add_argument(
         '--model',
         type=str,
         default='nano',
-        choices=['nano', 'small', 'medium', 'large'],
-        help='Model size (default: medium)'
+        choices=['nano', 'tiny', 'small', 'medium', 'large'],
+        help='Model size (default: nano). Note: RTMDet-Ins uses "tiny" instead of "nano"'
     )
     parser.add_argument('--epochs', type=int, default=150, help='Number of training epochs (default: 150)')
     parser.add_argument('--batch', type=int, default=10, help='Batch size (default: 10)')
@@ -91,7 +101,8 @@ def main():
         sys.exit(1)
 
     print("\n" + "="*70)
-    print("SOLOv2 Instance Segmentation Training")
+    arch_name = "SOLOv2" if args.architecture == 'solov2' else "RTMDet-Ins"
+    print(f"{arch_name} Instance Segmentation Training")
     print("="*70)
 
     # Load dataset configuration
@@ -105,6 +116,7 @@ def main():
 
     print(f"Dataset: {yolo_dataset_root}")
     print(f"Classes ({num_classes}): {class_names}")
+    print(f"Architecture: {arch_name}")
     print(f"Model size: {args.model.upper()}")
     print(f"Image size: {args.imgsz}x{args.imgsz}")
     print(f"Epochs: {args.epochs}")
@@ -131,37 +143,65 @@ def main():
 
     # Build MMDetection config
     print("\n" + "="*70)
-    print(f"Building SOLOv2-{args.model.upper()} configuration...")
+    print(f"Building {arch_name}-{args.model.upper()} configuration...")
     print("="*70)
 
-    config_content = build_mmdet_config(
-        model_size=args.model,
-        data_root=str(coco_dataset_root) + '/',
-        class_names=class_names,
-        num_classes=num_classes,
-        img_size=(args.imgsz, args.imgsz),
-        epochs=args.epochs,
-        batch_size=args.batch,
-        lr=args.lr,
-        momentum=args.momentum,
-        weight_decay=args.weight_decay,
-        warmup_epochs=args.warmup_epochs,
-        work_dir=args.work_dir,
-        mosaic_prob=args.mosaic,
-        mixup_prob=args.mixup,
-        hsv_h=args.hsv_h,
-        hsv_s=args.hsv_s,
-        hsv_v=args.hsv_v,
-        degrees=args.degrees,
-        translate=args.translate,
-        scale=args.scale,
-        shear=args.shear,
-        flipud=args.flipud,
-        fliplr=args.fliplr
-    )
+    if args.architecture == 'solov2':
+        config_content = build_mmdet_config(
+            model_size=args.model,
+            data_root=str(coco_dataset_root) + '/',
+            class_names=class_names,
+            num_classes=num_classes,
+            img_size=(args.imgsz, args.imgsz),
+            epochs=args.epochs,
+            batch_size=args.batch,
+            lr=args.lr,
+            momentum=args.momentum,
+            weight_decay=args.weight_decay,
+            warmup_epochs=args.warmup_epochs,
+            work_dir=args.work_dir,
+            mosaic_prob=args.mosaic,
+            mixup_prob=args.mixup,
+            hsv_h=args.hsv_h,
+            hsv_s=args.hsv_s,
+            hsv_v=args.hsv_v,
+            degrees=args.degrees,
+            translate=args.translate,
+            scale=args.scale,
+            shear=args.shear,
+            flipud=args.flipud,
+            fliplr=args.fliplr
+        )
+        config_filename = f'solov2_{args.model}_training.py'
+    else:  # rtmdet-ins
+        config_content = build_rtmdet_ins_config(
+            model_size=args.model,
+            data_root=str(coco_dataset_root) + '/',
+            class_names=class_names,
+            num_classes=num_classes,
+            img_size=(args.imgsz, args.imgsz),
+            epochs=args.epochs,
+            batch_size=args.batch,
+            lr=None,  # Use YOLO's auto formula
+            weight_decay=args.weight_decay,
+            warmup_iters=args.warmup_epochs * 100,  # Not used, we use warmup_epochs in config
+            work_dir=args.work_dir,
+            mosaic_prob=args.mosaic,
+            mixup_prob=args.mixup,
+            hsv_h=args.hsv_h,
+            hsv_s=args.hsv_s,
+            hsv_v=args.hsv_v,
+            degrees=args.degrees,
+            translate=args.translate,
+            scale=args.scale,
+            shear=args.shear,
+            flipud=args.flipud,
+            fliplr=args.fliplr
+        )
+        config_filename = f'rtmdet_ins_{args.model}_training.py'
 
     # Save config file
-    config_path = Path(__file__).parent / f'solov2_{args.model}_training.py'
+    config_path = Path(__file__).parent / config_filename
     with open(config_path, 'w') as f:
         f.write(config_content)
 
@@ -172,11 +212,12 @@ def main():
     print("Starting Training...")
     print("="*70 + "\n")
 
-    work_dir = args.work_dir if args.work_dir else f'./work_dirs/solov2_{args.model}'
-    log_file = f'solov2_{args.model}_training.log'
+    arch_prefix = 'solov2' if args.architecture == 'solov2' else 'rtmdet_ins'
+    work_dir = args.work_dir if args.work_dir else f'./work_dirs/{arch_prefix}_{args.model}'
+    log_file = f'{arch_prefix}_{args.model}_training.log'
 
     train_cmd = [
-        'mim', 'train', 'mmdet',
+        sys.executable, '-m', 'mim', 'train', 'mmdet',
         str(config_path),
         '--work-dir', work_dir,
         '--launcher', 'none'

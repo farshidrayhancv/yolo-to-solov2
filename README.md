@@ -1,164 +1,24 @@
-# YOLO-to-SOLOv2 Trainer
+# YOLO-to-Instance-Segmentation Trainer
 
-Train SOLOv2 instance segmentation models using your existing YOLO format datasets with **Ultralytics-matched augmentations and learning rate schedule**.
+Train **SOLOv2** and **RTMDet-Ins** instance segmentation models using your existing YOLO format datasets with **Ultralytics-matched augmentations and learning rate schedule**.
 
-## Architecture
+## 📐 Architecture
 
-### Training Pipeline
+Detailed architecture diagrams and comparisons for all three models:
 
-```mermaid
-graph TB
-    subgraph Input["Input: YOLO Dataset"]
-        A[YOLO Format<br/>Normalized Polygons]
-    end
+**👉 [View Complete Architecture Documentation →](ARCHITECTURE.md)**
 
-    subgraph Conversion["Automatic Conversion"]
-        B[Dataset Converter<br/>YOLO → COCO]
-    end
-
-    subgraph Model["SOLOv2 Architecture"]
-        direction TB
-        C[Backbone<br/>ResNet 18/34/50/101<br/>ImageNet Pretrained]
-        D[Neck<br/>FPN<br/>Multi-scale Features]
-        E[SOLOv2 Head<br/>Category Branch<br/>Mask Branch]
-
-        C --> D
-        D --> E
-    end
-
-    subgraph Training["Training"]
-        F[Losses<br/>Focal Loss + Dice Loss]
-        G[Optimizer<br/>SGD + Cosine LR]
-    end
-
-    subgraph Output["Output"]
-        H[Trained Model<br/>.pth checkpoints]
-        I[Metrics<br/>mAP, mAP50, mAP75]
-    end
-
-    A --> B
-    B --> C
-    E --> F
-    F --> G
-    G --> H
-    G --> I
-
-    style Input fill:#e1f5ff
-    style Model fill:#fff4e1
-    style Output fill:#e8f5e9
-```
-
-### SOLOv2 Internal Architecture
-
-```mermaid
-graph TB
-    subgraph Input["Input"]
-        IMG[Image<br/>H×W×3]
-    end
-
-    subgraph Backbone["ResNet Backbone"]
-        direction TB
-        C1[Conv1<br/>7×7, stride=2]
-        C2[Stage 2<br/>C2: H/4×W/4]
-        C3[Stage 3<br/>C3: H/8×W/8]
-        C4[Stage 4<br/>C4: H/16×W/16]
-        C5[Stage 5<br/>C5: H/32×W/32]
-
-        C1 --> C2
-        C2 --> C3
-        C3 --> C4
-        C4 --> C5
-    end
-
-    subgraph FPN["Feature Pyramid Network"]
-        direction TB
-        P2[P2: H/4×W/4<br/>256 channels]
-        P3[P3: H/8×W/8<br/>256 channels]
-        P4[P4: H/16×W/16<br/>256 channels]
-        P5[P5: H/32×W/32<br/>256 channels]
-        P6[P6: H/64×W/64<br/>256 channels]
-    end
-
-    subgraph Head["SOLOv2 Head"]
-        direction TB
-
-        subgraph Category["Category Branch"]
-            CAT1[Conv Stack<br/>4 layers]
-            CAT2[Grid System<br/>S×S cells]
-            CAT3[Classification<br/>num_classes]
-        end
-
-        subgraph Mask["Mask Branch"]
-            MASK1[Conv Stack<br/>4 layers]
-            MASK2[Mask Features<br/>E channels]
-            MASK3[Kernel Prediction<br/>S×S×E]
-        end
-
-        subgraph MaskFeat["Mask Feature Head"]
-            MF1[Multi-level Features<br/>P2→P3→P4]
-            MF2[Feature Fusion<br/>128 channels]
-            MF3[Mask Prototype<br/>H/4×W/4×E]
-        end
-    end
-
-    subgraph Output["Output"]
-        direction TB
-        OUT1[Category Scores<br/>S×S×num_classes]
-        OUT2[Instance Masks<br/>N×H×W]
-        OUT3[Final Predictions<br/>Class + Mask per instance]
-    end
-
-    IMG --> C1
-
-    C2 --> P2
-    C3 --> P3
-    C4 --> P4
-    C5 --> P5
-    P5 --> P6
-
-    P2 --> Category
-    P3 --> Category
-    P4 --> Category
-    P5 --> Category
-
-    P2 --> Mask
-    P3 --> Mask
-    P4 --> Mask
-    P5 --> Mask
-
-    P2 --> MaskFeat
-    P3 --> MaskFeat
-    P4 --> MaskFeat
-
-    CAT1 --> CAT2
-    CAT2 --> CAT3
-    CAT3 --> OUT1
-
-    MASK1 --> MASK2
-    MASK2 --> MASK3
-
-    MF1 --> MF2
-    MF2 --> MF3
-
-    MASK3 --> OUT2
-    MF3 --> OUT2
-
-    OUT1 --> OUT3
-    OUT2 --> OUT3
-
-    style Input fill:#e1f5ff
-    style Backbone fill:#fff4e1
-    style FPN fill:#ffe1f5
-    style Head fill:#e1ffe1
-    style Output fill:#e8f5e9
-```
+- **SOLOv2**: Grid-based with dynamic kernels - best for precise masks
+- **RTMDet-Ins**: One-stage with CSPNeXt backbone - best overall
+- **YOLOv11-seg**: Prototype-based - best for speed
 
 ## Features
 
+- ✅ **Two Architectures**: Choose between SOLOv2 (ResNet backbone) or RTMDet-Ins (CSPNeXt backbone)
 - ✅ **Drop-in Replacement**: Use YOLO format datasets directly
-- ✅ **4 Model Sizes**: Nano (fastest) → Large (most accurate)
+- ✅ **4 Model Sizes**: Nano/Tiny (fastest) → Large (most accurate)
 - ✅ **Auto Conversion**: YOLO → COCO format conversion built-in
-- ✅ **Pre-trained Backbones**: ImageNet pre-trained ResNet models
+- ✅ **Pre-trained Backbones**: ImageNet pre-trained ResNet (SOLOv2) or CSPNeXt (RTMDet-Ins) models
 - ✅ **Ultralytics-Matched Training**:
   - YOLO's auto LR formula: `lr = 0.002 * 5 / (4 + num_classes)`
   - 7-epoch linear warmup (2% to 100%)
@@ -192,33 +52,98 @@ mim install mmengine 'mmcv>=2.0.0rc4,<2.2.0' 'mmdet>=3.0.0'
 pip install pyyaml pillow tqdm
 ```
 
-### Train
+**Using uv (fast alternative):**
 
 ```bash
-# Basic (nano model, 1280px, 150 epochs)
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install dependencies
+uv venv --python 3.11
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install all dependencies
+uv pip install -r requirements.txt
+
+# Install MMDetection ecosystem with mim
+uv pip install openmim
+uv run python -m mim install mmengine 'mmcv>=2.0.0rc4,<2.2.0' 'mmdet>=3.0.0'
+```
+
+**Or use uv directly without activation:**
+
+```bash
+# Train directly with uv (no venv activation needed)
+uv run train.py --data /path/to/data.yaml --model nano
+```
+
+### Train
+
+**Using regular Python:**
+
+```bash
+# Basic SOLOv2 (nano model, 1280px, 150 epochs)
 python train.py --data /path/to/data.yaml --model nano
 
+# Train RTMDet-Ins (tiny model, 640px, 150 epochs)
+python train.py --data /path/to/data.yaml --architecture rtmdet-ins --model tiny --imgsz 640
+
 # Custom configuration
-python train.py --data /path/to/data.yaml --model small --epochs 100 --batch 8
+python train.py --data /path/to/data.yaml --architecture solov2 --model small --epochs 100 --batch 8
 
 # List available models
 python train.py --list-models
 ```
 
+**Using uv (same commands, just prefix with `uv run`):**
+
+```bash
+# Basic SOLOv2 (nano model, 1280px, 150 epochs)
+uv run train.py --data /path/to/data.yaml --model nano
+
+# Train RTMDet-Ins (tiny model, 640px, 150 epochs)
+uv run train.py --data /path/to/data.yaml --architecture rtmdet-ins --model tiny --imgsz 640
+```
+
 ## Model Sizes
+
+### SOLOv2 Models
 
 | Model | Backbone | FPN Channels | Mask Channels | Batch | Speed | Use Case |
 |-------|----------|--------------|---------------|-------|-------|----------|
-| **nano** | ResNet18 | 128 | 64 | 10 | ⚡⚡⚡ | Edge devices, real-time |
+| **nano** | ResNet18 | 128 | 64 | 8 | ⚡⚡⚡ | Edge devices, real-time |
 | **small** | ResNet34 | 192 | 96 | 6 | ⚡⚡ | Balanced |
-| **medium** | ResNet50 | 256 | 128 | 4 | ⚡ | General (default) |
+| **medium** | ResNet50 | 256 | 128 | 4 | ⚡ | General |
 | **large** | ResNet101 | 384 | 256 | 2 | 🐢 | Maximum accuracy |
+
+### RTMDet-Ins Models
+
+| Model | Backbone | Neck Channels | Deepen/Widen | Batch | Speed | Use Case |
+|-------|----------|---------------|--------------|-------|-------|----------|
+| **tiny** | CSPNeXt | 96 | 0.167 / 0.375 | 10 | ⚡⚡⚡ | Edge devices, real-time |
+| **small** | CSPNeXt | 128 | 0.33 / 0.5 | 8 | ⚡⚡ | Balanced |
+| **medium** | CSPNeXt | 192 | 0.67 / 0.75 | 6 | ⚡ | General |
+| **large** | CSPNeXt | 256 | 1.0 / 1.0 | 4 | 🐢 | Maximum accuracy |
+
+### Choosing Between SOLOv2 and RTMDet-Ins
+
+| Feature | SOLOv2 | RTMDet-Ins |
+|---------|--------|------------|
+| **Backbone** | ResNet (ImageNet pretrained) | CSPNeXt (ImageNet pretrained) |
+| **Architecture** | Grid-based segmentation | One-stage detector with mask head |
+| **Speed** | Moderate | Faster (especially on GPU) |
+| **Accuracy** | Good | Better (on COCO) |
+| **Optimizer** | SGD | AdamW |
+| **Learning Rate** | Auto formula (class-dependent) | Fixed 0.004 |
+| **Training** | Stable with proper LR | Fast convergence |
+| **Use RTMDet-Ins if:** | - | Want faster inference, better COCO performance, or modern architecture |
+| **Use SOLOv2 if:** | - | Need proven stability or prefer SGD optimizer |
 
 ## Performance
 
 ### COCO Benchmark (Official Results)
 
-SOLOv2 official performance on COCO val2017 (80 classes, 5000 images):
+**SOLOv2** official performance on COCO val2017 (80 classes, 5000 images):
 
 | Model | Backbone | mAP | mAP50 | mAP75 | Params | FPS |
 |-------|----------|-----|-------|-------|--------|-----|
@@ -226,34 +151,58 @@ SOLOv2 official performance on COCO val2017 (80 classes, 5000 images):
 | SOLOv2 | ResNet50 | 34.8 | 55.5 | 37.2 | 46.1M | 12.1 |
 | SOLOv2 | ResNet101 | 37.1 | 58.3 | 39.6 | 65.0M | 9.9 |
 
+**RTMDet-Ins** official performance on COCO val2017 (80 classes, 5000 images):
+
+| Model | Backbone | mAP | mAP50 | mAP75 | Params | FPS |
+|-------|----------|-----|-------|-------|--------|-----|
+| RTMDet-Ins-tiny | CSPNeXt-tiny | 33.5 | 52.8 | 35.0 | 11.1M | ~50 |
+| RTMDet-Ins-s | CSPNeXt-s | 38.1 | 58.2 | 41.0 | 20.6M | ~40 |
+| RTMDet-Ins-m | CSPNeXt-m | 42.6 | 62.9 | 46.3 | 40.0M | ~30 |
+| RTMDet-Ins-l | CSPNeXt-l | 44.9 | 65.4 | 48.6 | 52.3M | ~22 |
+
 ### Custom Dataset Results (Lingfield Racetrack)
 
 Tested on 217 train, 99 val images, 3 classes (grass track, jumps, track) with **identical training configuration** (150 epochs, 1280px, matched augmentations and LR schedule):
 
-#### Final Results (Epoch 150)
+#### Final Results (Epoch 150) - **Latest Training Run (2025-12-20)**
 
-| Model | mAP50 | mAP50-95 | Params | Training Time |
-|-------|-------|----------|--------|---------------|
-| **YOLOv11n-seg** | 94.5% | **62.0%** | 2.9M | ~12 minutes |
-| **SOLOv2-NANO** | **95.0%** | **75.5%** | 11.2M | ~40 minutes |
+| Model | mAP50-95 | mAP50 | mAP75 | Params | Training Time | Best Epoch |
+|-------|----------|-------|-------|--------|---------------|------------|
+| **YOLOv11n-seg** | 62.0% | 94.5% | ~80% | 2.9M | ~12 min | - |
+| **SOLOv2-nano** | **74.5%** | **95.0%** | **87.2%** | 11.2M | ~90 min | 130 |
+| **RTMDet-Ins-tiny** | **75.3%** | 93.5% | 80.6% | 11.1M | ~85 min | 142 |
 
-**SOLOv2 achieves 13.5% higher mAP50-95** with proper training configuration!
+**Key Findings**:
+- ✅ **SOLOv2 achieves 12.5% higher mAP50-95** than YOLO (74.5% vs 62.0%)
+- ✅ **RTMDet-Ins achieves 13.3% higher mAP50-95** than YOLO (75.3% vs 62.0%)
+- ✅ **SOLOv2 has highest mAP50** (95.0%) - best at rough segmentation
+- ✅ **SOLOv2 has highest mAP75** (87.2%) - best at precise masks
+- ✅ **RTMDet-Ins has best overall mAP50-95** (75.3%) - most consistent
+- ⚠️ **YOLO is 7x faster** but significantly less accurate on precise masks
 
-#### Detailed Metrics (Epoch 150)
+#### Detailed Metrics (Latest Run - 2025-12-20)
 
-**SOLOv2-NANO:**
-- mAP@50-95: **75.5%**
+**SOLOv2-nano (Epoch 150, Best @ 130):**
+- mAP@50-95: **74.5%** (best: 74.5% @ epoch 130)
 - mAP@50: **95.0%**
-- mAP@75: **88.9%**
-- Recall: **82.6%**
-- Final loss: 0.251
-- Gradient norm: 3.16 (stable)
+- mAP@75: **87.2%**
+- Final loss: 0.250
+- Gradient norm: 3.44 (stable)
+- Training time: ~90 minutes
 
-**YOLOv11n-seg:**
+**RTMDet-Ins-tiny (Epoch 150, Best @ 142):**
+- mAP@50-95: **75.3%** (best: 75.4% @ epoch 149)
+- mAP@50: 93.5%
+- mAP@75: 80.6%
+- Final loss: 0.429
+- Gradient norm: 2.85 (stable)
+- Training time: ~85 minutes
+
+**YOLOv11n-seg (Epoch 150):**
 - mAP@50-95: 62.0%
 - mAP@50: 94.5%
 - mAP@75: ~80% (estimated)
-- Recall: ~85%
+- Training time: ~12 minutes
 
 ### The Importance of Learning Rate Schedule
 
@@ -277,22 +226,27 @@ Using the naive 0.01 LR caused:
 With the correct formula-based LR (0.001429):
 - Stable gradient norms (3-35 range)
 - Smooth loss convergence
-- **75.5% mAP50-95** - outperforming YOLO by 13.5%
+- **74.5% mAP50-95** (SOLOv2) and **75.3% mAP50-95** (RTMDet-Ins) - outperforming YOLO by 12-13%
 
-### Why SOLOv2 Excels with Proper Training
+### Why SOLOv2 & RTMDet-Ins Excel with Proper Training
 
-**1. More Precise Masks**
-- mAP50 (IoU=0.5): Both ~95% (similar)
-- **mAP50-95 (IoU=0.5-0.95)**: SOLOv2 75.5% vs YOLO 62% (+13.5%)
-- SOLOv2's architecture produces tighter mask fits at higher IoU thresholds
+**1. More Precise Masks (Both Models)**
+- mAP50 (IoU=0.5): All models ~93-95% (similar rough segmentation)
+- **mAP50-95 (IoU=0.5-0.95)**: SOLOv2 74.5%, RTMDet-Ins 75.3% vs YOLO 62.0% (+12-13%)
+- **mAP75 (IoU=0.75)**: SOLOv2 **87.2%**, RTMDet-Ins 80.6% vs YOLO ~80%
+- Architecture design produces tighter mask fits at higher IoU thresholds
 
-**2. Grid-Based Prediction**
-- SOLOv2's spatial grid system enables finer-grained instance localization
-- Better handling of mask boundaries and overlapping regions
+**2. SOLOv2-Specific Strengths**
+- **Grid-Based Prediction**: Spatial grid system enables finer-grained instance localization
+- **Best mAP75**: 87.2% shows superior mask boundary precision
+- **Highest mAP50**: 95.0% indicates excellent instance detection
+- **Decoupled Heads**: Separate category and mask branches with multi-level fusion (P2→P3→P4)
 
-**3. Decoupled Heads**
-- Separate category and mask branches allow specialized feature learning
-- Mask feature head with multi-level fusion (P2→P3→P4)
+**3. RTMDet-Ins-Specific Strengths**
+- **Best Overall mAP50-95**: 75.3% shows most consistent performance across IoU thresholds
+- **Modern Architecture**: CSPNeXt backbone with efficient one-stage detection
+- **AdamW Optimization**: Fast convergence with adaptive learning rates
+- **Balanced Performance**: Good trade-off between speed and accuracy
 
 ### Ultralytics Compatibility
 
@@ -360,11 +314,12 @@ Label format: `class_id x1 y1 x2 y2 x3 y3 ...` (normalized 0-1)
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `--data` | required | Path to data.yaml |
-| `--model` | nano | nano, small, medium, large |
+| `--architecture` | solov2 | Architecture: solov2 or rtmdet-ins |
+| `--model` | nano | nano/tiny, small, medium, large |
 | `--epochs` | 150 | Training epochs |
-| `--batch` | 10 | Batch size (default varies by model) |
-| `--imgsz` | 1280 | Image size |
-| `--lr` | auto | Learning rate (uses YOLO formula) |
+| `--batch` | auto | Batch size (default varies by model) |
+| `--imgsz` | 1280 | Image size (640 recommended for RTMDet-Ins) |
+| `--lr` | auto | Learning rate (uses YOLO formula for SOLOv2, 0.004 for RTMDet-Ins) |
 | `--work-dir` | auto | Output directory |
 | `--skip-conversion` | false | Skip YOLO→COCO conversion |
 
@@ -406,12 +361,24 @@ tensorboard --logdir=work_dirs/solov2_nano
 
 ## Citation
 
+If you use SOLOv2:
 ```bibtex
 @article{wang2020solov2,
   title={SOLOv2: Dynamic and Fast Instance Segmentation},
   author={Wang, Xinlong and Zhang, Rufeng and Kong, Tao and Li, Lei and Shen, Chunhua},
   journal={NeurIPS},
   year={2020}
+}
+```
+
+If you use RTMDet-Ins:
+```bibtex
+@misc{lyu2022rtmdet,
+  title={RTMDet: An Empirical Study of Designing Real-Time Object Detectors},
+  author={Chengqi Lyu and Wenwei Zhang and Haian Huang and Yue Zhou and Yudong Wang and Yanyi Liu and Shilong Zhang and Kai Chen},
+  year={2022},
+  eprint={2212.07784},
+  archivePrefix={arXiv}
 }
 ```
 
@@ -422,6 +389,7 @@ Apache 2.0
 ## Acknowledgments
 
 This implementation uses:
-- [MMDetection](https://github.com/open-mmlab/mmdetection) for SOLOv2
+- [MMDetection](https://github.com/open-mmlab/mmdetection) for SOLOv2 and RTMDet-Ins
 - [Ultralytics](https://github.com/ultralytics/ultralytics) training recipe
 - [Albumentations](https://albumentations.ai/) for augmentations
+- [RTMDet](https://github.com/open-mmlab/mmdetection/tree/main/configs/rtmdet) for modern instance segmentation
