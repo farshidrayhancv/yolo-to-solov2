@@ -13,6 +13,7 @@ import subprocess
 import gc
 from pathlib import Path
 from tqdm import tqdm
+import supervision as sv
 
 # Fix PyTorch 2.6+ weights_only issue - monkey-patch torch.load
 _original_torch_load = torch.load
@@ -72,17 +73,13 @@ def get_config_path(model_type):
         raise ValueError(f"Unknown model type: {model_type}")
 
 
-def create_colored_mask(frame_shape, masks, labels, scores, conf_threshold=0.5):
-    """Create colored segmentation mask"""
+def create_colored_mask(frame_shape, masks, labels, scores, num_classes, conf_threshold=0.5):
+    """Create colored segmentation mask using Supervision's color palette"""
     h, w = frame_shape[:2]
     colored_mask = np.zeros((h, w, 3), dtype=np.uint8)
 
-    # Class colors: green (grass track), blue (jumps), red (track)
-    colors = [
-        (0, 255, 0),    # Green
-        (255, 0, 0),    # Blue
-        (0, 0, 255),    # Red
-    ]
+    # Use Supervision's ColorPalette for automatic color generation
+    color_palette = sv.ColorPalette.DEFAULT
 
     # Filter by confidence
     valid = scores >= conf_threshold
@@ -96,7 +93,8 @@ def create_colored_mask(frame_shape, masks, labels, scores, conf_threshold=0.5):
     for idx in sort_idx:
         mask = masks[idx]
         label = labels[idx]
-        color = colors[label]
+        # Get color from supervision palette (BGR format for OpenCV)
+        color = color_palette.by_idx(label).as_bgr()
         colored_mask[mask] = color
 
     return colored_mask
@@ -104,6 +102,10 @@ def create_colored_mask(frame_shape, masks, labels, scores, conf_threshold=0.5):
 
 def process_video(video_path, model, output_path, conf_threshold=0.5, max_frames=None):
     """Process video with model"""
+
+    # Get number of classes from model config
+    num_classes = len(model.dataset_meta['classes'])
+    print(f"Model has {num_classes} classes: {model.dataset_meta['classes']}")
 
     # Open video
     cap = cv2.VideoCapture(str(video_path))
@@ -172,7 +174,7 @@ def process_video(video_path, model, output_path, conf_threshold=0.5, max_frames
 
             # Create colored mask
             colored_mask = create_colored_mask(
-                frame.shape, masks, labels, scores, conf_threshold
+                frame.shape, masks, labels, scores, num_classes, conf_threshold
             )
 
             # Create overlay
