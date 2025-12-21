@@ -131,13 +131,13 @@ uv run train.py --data /path/to/data.yaml --architecture rtmdet-ins --model tiny
 |---------|--------|------------|
 | **Backbone** | ResNet (ImageNet pretrained) | CSPNeXt (ImageNet pretrained) |
 | **Architecture** | Grid-based segmentation | One-stage detector with mask head |
-| **Speed** | Moderate | Faster (especially on GPU) |
-| **Accuracy** | Good | Better (on COCO) |
+| **Training Time** | ~90 min (150 epochs) | ~85 min (150 epochs) |
+| **Inference** | Standard | Optimized for speed |
 | **Optimizer** | SGD | AdamW |
-| **Learning Rate** | Auto formula (class-dependent) | Fixed 0.004 |
-| **Training** | Stable with proper LR | Fast convergence |
-| **Use RTMDet-Ins if:** | - | Want faster inference, better COCO performance, or modern architecture |
-| **Use SOLOv2 if:** | - | Need proven stability or prefer SGD optimizer |
+| **Learning Rate** | Auto formula (class-dependent) | Auto formula (class-dependent) |
+| **Best For** | Highest mask precision (mAP75: 87.2%) | Best overall consistency (mAP50-95: 75.3%) |
+| **Use RTMDet-Ins if:** | - | Want best overall mAP50-95 and modern architecture |
+| **Use SOLOv2 if:** | - | Need highest precision masks (best mAP75) |
 
 ## Performance
 
@@ -227,26 +227,6 @@ With the correct formula-based LR (0.001429):
 - Stable gradient norms (3-35 range)
 - Smooth loss convergence
 - **74.5% mAP50-95** (SOLOv2) and **75.3% mAP50-95** (RTMDet-Ins) - outperforming YOLO by 12-13%
-
-### Why SOLOv2 & RTMDet-Ins Excel with Proper Training
-
-**1. More Precise Masks (Both Models)**
-- mAP50 (IoU=0.5): All models ~93-95% (similar rough segmentation)
-- **mAP50-95 (IoU=0.5-0.95)**: SOLOv2 74.5%, RTMDet-Ins 75.3% vs YOLO 62.0% (+12-13%)
-- **mAP75 (IoU=0.75)**: SOLOv2 **87.2%**, RTMDet-Ins 80.6% vs YOLO ~80%
-- Architecture design produces tighter mask fits at higher IoU thresholds
-
-**2. SOLOv2-Specific Strengths**
-- **Grid-Based Prediction**: Spatial grid system enables finer-grained instance localization
-- **Best mAP75**: 87.2% shows superior mask boundary precision
-- **Highest mAP50**: 95.0% indicates excellent instance detection
-- **Decoupled Heads**: Separate category and mask branches with multi-level fusion (P2→P3→P4)
-
-**3. RTMDet-Ins-Specific Strengths**
-- **Best Overall mAP50-95**: 75.3% shows most consistent performance across IoU thresholds
-- **Modern Architecture**: CSPNeXt backbone with efficient one-stage detection
-- **AdamW Optimization**: Fast convergence with adaptive learning rates
-- **Balanced Performance**: Good trade-off between speed and accuracy
 
 ### Ultralytics Compatibility
 
