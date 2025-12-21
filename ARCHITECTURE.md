@@ -611,26 +611,4 @@ Results on Lingfield Racetrack (3 classes, 217 train, 99 val):
 
 ---
 
-## Which Architecture to Choose?
 
-### Choose **SOLOv2** if you need:
-- 🎯 **Highest precision masks** (87.2% mAP75)
-- 🎯 Best instance detection (95.0% mAP50)
-- 🎯 Proven, stable architecture
-- 🎯 Don't mind slightly longer training
-
-### Choose **RTMDet-Ins** if you need:
-- 🏆 **Best overall consistency** (75.3% mAP50-95)
-- 🏆 Modern, efficient architecture
-- 🏆 Fast convergence with AdamW
-- 🏆 Balanced speed/accuracy
-
-### Choose **YOLOv11-seg** if you need:
-- ⚡ **Fastest training** (7x faster)
-- ⚡ Smallest model (2.9M params)
-- ⚡ Real-time inference critical
-- ⚡ Rough segmentation acceptable (mAP50 ~94%)
-
----
-
-*For implementation details, see the main [README.md](README.md)*
