@@ -9,7 +9,6 @@ import sys
 import cv2
 import numpy as np
 import torch
-import subprocess
 import gc
 from pathlib import Path
 from tqdm import tqdm
@@ -59,6 +58,8 @@ Examples:
                         help='Device (default: cuda:0)')
     parser.add_argument('--max-frames', type=int, default=None,
                         help='Maximum frames to process (default: all)')
+    parser.add_argument('--batch-size', type=int, default=1,
+                        help='Batch size for inference (default: 1, single frame)')
 
     return parser.parse_args()
 
@@ -100,12 +101,15 @@ def create_colored_mask(frame_shape, masks, labels, scores, num_classes, conf_th
     return colored_mask
 
 
-def process_video(video_path, model, output_path, conf_threshold=0.5, max_frames=None):
+def process_video(video_path, model, output_path, conf_threshold=0.5, max_frames=None, batch_size=1):
     """Process video with model"""
 
     # Get number of classes from model config
     num_classes = len(model.dataset_meta['classes'])
     print(f"Model has {num_classes} classes: {model.dataset_meta['classes']}")
+
+    if batch_size > 1:
+        print(f"Batch processing enabled: batch_size={batch_size}")
 
     # Open video
     cap = cv2.VideoCapture(str(video_path))
@@ -125,95 +129,95 @@ def process_video(video_path, model, output_path, conf_threshold=0.5, max_frames
     else:
         print(f"\nVideo: {width}x{height} @ {fps} FPS ({total_frames} frames)")
 
-    # Create output writer using ffmpeg pipe for better H.264 encoding
+    # Create output writer using cv2.VideoWriter
     # Scale to 640px wide per view (3 views = 1920px total width)
     view_width = 640
     view_height = int(height * view_width / width)
     output_width = view_width * 3
     output_height = view_height
 
-    # Start ffmpeg process
-    ffmpeg_cmd = [
-        'ffmpeg', '-y',
-        '-f', 'rawvideo',
-        '-vcodec', 'rawvideo',
-        '-s', f'{output_width}x{output_height}',
-        '-pix_fmt', 'bgr24',
-        '-r', str(fps),
-        '-i', '-',
-        '-an',
-        '-vcodec', 'libx264',
-        '-preset', 'medium',
-        '-crf', '23',
-        '-pix_fmt', 'yuv420p',
-        str(output_path)
-    ]
+    # Use cv2.VideoWriter (avoids pipe deadlock issues)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(str(output_path), fourcc, fps, (output_width, output_height))
 
-    print(f"Using H.264 encoding via ffmpeg")
+    if not out.isOpened():
+        raise ValueError(f"Cannot open VideoWriter for: {output_path}")
+
+    print(f"Using cv2.VideoWriter with mp4v codec")
     print(f"Output resolution: {output_width}x{output_height} (3 views @ {view_width}x{view_height} each)")
-    ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
 
     # Process frames
     print("Processing frames...")
     frame_count = 0
+    frames_read = 0
     with tqdm(total=total_frames) as pbar:
-        while frame_count < total_frames:
+        # Batch processing loop
+        frame_buffer = []
+
+        while frames_read < total_frames:
             ret, frame = cap.read()
             if not ret:
                 break
 
-            # Run inference with no gradient tracking (saves memory)
-            with torch.no_grad():
-                result = inference_detector(model, frame)
-                pred = result.pred_instances
+            frame_buffer.append(frame)
+            frames_read += 1
 
-                # Move tensors to CPU and convert to numpy immediately
-                masks = pred.masks.cpu().numpy()
-                labels = pred.labels.cpu().numpy()
-                scores = pred.scores.cpu().numpy()
+            # Process when batch is full or we've reached the end
+            if len(frame_buffer) == batch_size or frames_read >= total_frames:
+                # Run inference with no gradient tracking (saves memory)
+                with torch.no_grad():
+                    if len(frame_buffer) == 1:
+                        # Single frame inference (default behavior)
+                        result = inference_detector(model, frame_buffer[0])
+                        results = [result]
+                    else:
+                        # Batch inference
+                        results = inference_detector(model, frame_buffer)
 
-            # Create colored mask
-            colored_mask = create_colored_mask(
-                frame.shape, masks, labels, scores, num_classes, conf_threshold
-            )
+                # Process each frame in the batch
+                for frame_idx, (frame, result) in enumerate(zip(frame_buffer, results)):
+                    pred = result.pred_instances
 
-            # Create overlay
-            overlay = cv2.addWeighted(frame, 0.5, colored_mask, 0.5, 0)
+                    # Move tensors to CPU and convert to numpy immediately
+                    masks = pred.masks.cpu().numpy()
+                    labels = pred.labels.cpu().numpy()
+                    scores = pred.scores.cpu().numpy()
 
-            # Resize each view to fit in 1080p output (640px wide per view)
-            view_width = 640
-            view_height = int(height * view_width / width)
-            frame_resized = cv2.resize(frame, (view_width, view_height))
-            mask_resized = cv2.resize(colored_mask, (view_width, view_height))
-            overlay_resized = cv2.resize(overlay, (view_width, view_height))
+                    # Create colored mask
+                    colored_mask = create_colored_mask(
+                        frame.shape, masks, labels, scores, num_classes, conf_threshold
+                    )
 
-            # Concatenate: Original | Mask | Overlay
-            three_view = np.hstack([frame_resized, mask_resized, overlay_resized])
+                    # Create overlay
+                    overlay = cv2.addWeighted(frame, 0.5, colored_mask, 0.5, 0)
 
-            # Write frame to ffmpeg stdin
-            try:
-                ffmpeg_proc.stdin.write(three_view.tobytes())
-            except BrokenPipeError:
-                print("\nERROR: ffmpeg pipe broken")
-                break
+                    # Resize each view to fit in 1080p output (640px wide per view)
+                    view_width = 640
+                    view_height = int(height * view_width / width)
+                    frame_resized = cv2.resize(frame, (view_width, view_height))
+                    mask_resized = cv2.resize(colored_mask, (view_width, view_height))
+                    overlay_resized = cv2.resize(overlay, (view_width, view_height))
 
-            # Clear memory every 100 frames to prevent balloon
-            if frame_count % 100 == 0:
-                torch.cuda.empty_cache()
-                gc.collect()
+                    # Concatenate: Original | Mask | Overlay
+                    three_view = np.hstack([frame_resized, mask_resized, overlay_resized])
 
-            frame_count += 1
-            pbar.update(1)
+                    # Write frame directly to VideoWriter (no pipe blocking)
+                    out.write(three_view)
 
-    # Close ffmpeg
+                    pbar.update(1)
+
+                # Clear buffer and memory
+                frame_buffer = []
+                frame_count += len(results)
+
+                # Clear memory every 100 frames to prevent balloon
+                if frame_count % 100 == 0:
+                    torch.cuda.empty_cache()
+                    gc.collect()
+
+    # Release resources
     cap.release()
-    ffmpeg_proc.stdin.close()
-    ffmpeg_proc.wait()
-
-    if ffmpeg_proc.returncode != 0:
-        stderr = ffmpeg_proc.stderr.read().decode('utf-8')
-        print(f"\nERROR: ffmpeg failed:\n{stderr}")
-        raise ValueError(f"ffmpeg encoding failed")
+    out.release()
 
     print(f"\n✓ Output saved: {output_path}")
 
@@ -257,7 +261,7 @@ def main():
     model = init_detector(config_path, args.model, device=args.device)
 
     # Process video
-    process_video(args.video, model, args.output, args.conf, args.max_frames)
+    process_video(args.video, model, args.output, args.conf, args.max_frames, args.batch_size)
 
     print("\n" + "="*70)
     print("Inference Complete!")

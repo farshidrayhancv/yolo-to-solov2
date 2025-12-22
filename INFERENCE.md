@@ -22,11 +22,11 @@ python inference.py \
     --type rtmdet-ins
 ```
 
-### Batch Inference (Multiple Videos)
+### Batch Inference (Multiple Videos with Batch Processing)
 
 ```bash
-# Run test script (2 videos × 2 models = 4 outputs)
-./test_inference.sh
+# Run batch inference script (2 videos × 2 models = 4 outputs, batch_size=12)
+./run_inference_batch8.sh
 ```
 
 ---
@@ -69,6 +69,7 @@ python inference.py --video VIDEO --model MODEL.pth --type {solov2|rtmdet-ins}
 | `--output` | ✗ | Output path (default: auto-generated) |
 | `--conf` | ✗ | Confidence threshold (default: 0.5) |
 | `--device` | ✗ | Device to use (default: cuda:0) |
+| `--batch-size` | ✗ | Batch size for inference (default: 1) |
 
 ### Examples
 
@@ -97,6 +98,15 @@ python inference.py \
     --model model.pth \
     --type solov2 \
     --device cpu
+```
+
+**Batch inference (faster for videos):**
+```bash
+python inference.py \
+    --video input.mp4 \
+    --model model.pth \
+    --type solov2 \
+    --batch-size 4
 ```
 
 ---
@@ -214,9 +224,13 @@ python inference.py --video input.mp4 --model model.pth --type solov2 --conf 0.7
 
 ### Speed Optimization
 
-1. **Use RTMDet-Ins** for faster inference (~5-10% faster than SOLOv2)
-2. **Lower confidence threshold** reduces post-processing time
-3. **GPU inference** is 10-50x faster than CPU
+1. **Use batch processing** with `--batch-size 4` or higher for faster video inference
+   - Default is single-frame processing (`--batch-size 1`)
+   - Batch sizes of 2-8 typically provide best speedup
+   - Higher batch sizes increase VRAM usage
+2. **Use RTMDet-Ins** for faster inference (~5-10% faster than SOLOv2)
+3. **Lower confidence threshold** reduces post-processing time
+4. **GPU inference** is 10-50x faster than CPU
 
 ### Quality Optimization
 

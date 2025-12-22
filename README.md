@@ -20,14 +20,19 @@ Run inference on videos with trained models:
 
 Quick start:
 ```bash
-# Single video
+# Single video (default: single-frame processing)
 python inference.py --video video.mp4 --model work_dirs/solov2_nano/best.pth --type solov2
 
-# Batch processing (2 videos × 2 models = 4 outputs)
-./test_inference.sh
+# Batch processing (faster, processes multiple frames at once)
+python inference.py --video video.mp4 --model work_dirs/solov2_nano/best.pth --type solov2 --batch-size 8
+
+# Sequential inference: 2 videos × 2 models = 4 outputs
+./run_inference_batch8.sh
 ```
 
 Output format: **Original | Colored Mask | Overlay** (3 views side-by-side)
+- **Dynamic color assignment**: Colors automatically generated per class using Supervision's ColorPalette
+- Works with any number of classes
 
 ## Features
 
