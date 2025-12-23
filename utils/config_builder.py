@@ -28,12 +28,12 @@ def build_mmdet_config(
     work_dir=None,
     mosaic_prob=1.0,
     mixup_prob=0.0,  # Changed: YOLOv11n doesn't use mixup
-    hsv_h=0.015,
-    hsv_s=0.7,
-    hsv_v=0.4,
+    hsv_h=0.01,
+    hsv_s=0.01,
+    hsv_v=0.01,
     degrees=0.0,  # Changed: YOLOv11n doesn't use rotation
     translate=0.1,
-    scale=0.5,
+    scale=0.2,
     shear=0.0,  # Changed: YOLOv11n doesn't use shear
     flipud=0.0,
     fliplr=0.5
@@ -80,7 +80,7 @@ _base_ = [
 
 # Custom transforms
 custom_imports = dict(
-    imports=['utils.mosaic_transform'],
+    imports=['utils.mosaic_transform', 'utils.safe_albu_transform'],
     allow_failed_imports=False)
 
 # Dataset settings
@@ -162,9 +162,9 @@ train_pipeline = [
         pad_val=114,
         prob={mosaic_prob}
     ),
-    # Albumentations augmentations (using MMDetection's official Albu wrapper)
+    # Albumentations augmentations (using SafeAlbu wrapper with empty mask protection)
     dict(
-        type='Albu',
+        type='SafeAlbu',
         transforms=[
             # HSV color augmentation
             dict(
@@ -211,7 +211,7 @@ train_pipeline = [
             gt_masks='masks'
         )
     ),
-    # Resize to target size
+    # Resize to target size (SafeAlbu handles empty sample skipping internally)
     dict(
         type='Resize',
         scale=img_scale,
@@ -252,9 +252,9 @@ mosaic_pipeline = [
         pad_val=114,
         prob={mixup_prob}
     ),
-    # Albumentations augmentations
+    # Albumentations augmentations (with SafeAlbu wrapper)
     dict(
-        type='Albu',
+        type='SafeAlbu',
         transforms=[
             # HSV color augmentation
             dict(
@@ -300,6 +300,7 @@ mosaic_pipeline = [
             gt_masks='masks'
         )
     ),
+    # Resize (SafeAlbu handles empty sample skipping internally)
     dict(type='Resize', scale=img_scale, keep_ratio=True),
     dict(type='PackDetInputs')
 ]
@@ -317,7 +318,7 @@ train_dataloader = dict(
             data_root=data_root,
             ann_file='annotations/instances_train.json',
             data_prefix=dict(img='train/'),
-            filter_cfg=dict(filter_empty_gt=False, min_size=32),
+            filter_cfg=dict(filter_empty_gt=True, min_size=32),
             pipeline=pre_mosaic_pipeline,
             backend_args=backend_args,
             metainfo=dict(classes=classes)),
@@ -430,12 +431,12 @@ def build_rtmdet_ins_config(
     work_dir=None,
     mosaic_prob=1.0,
     mixup_prob=0.0,  # Match YOLO default (no mixup)
-    hsv_h=0.015,
-    hsv_s=0.7,
-    hsv_v=0.4,
+    hsv_h=0.01,
+    hsv_s=0.01,
+    hsv_v=0.01,
     degrees=0.0,
     translate=0.1,
-    scale=0.5,
+    scale=0.2,
     shear=0.0,
     flipud=0.0,
     fliplr=0.5
@@ -654,7 +655,7 @@ train_dataloader = dict(
         data_root=data_root,
         ann_file='annotations/instances_train.json',
         data_prefix=dict(img='train/'),
-        filter_cfg=dict(filter_empty_gt=False, min_size=32),
+        filter_cfg=dict(filter_empty_gt=True, min_size=32),
         pipeline=train_pipeline,
         backend_args=backend_args,
         metainfo=dict(classes=classes)))

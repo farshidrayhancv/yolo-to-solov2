@@ -343,6 +343,17 @@ Label format: `class_id x1 y1 x2 y2 x3 y3 ...` (normalized 0-1)
 
 **Note**: Defaults match YOLOv11n behavior for fair comparison.
 
+### Augmentation Robustness
+
+This implementation includes **SafeAlbu** (`utils/safe_albu_transform.py`), a wrapper around MMDetection's Albu transform that handles edge cases where aggressive augmentation removes all objects from an image:
+
+```python
+# Small objects (26-64px) + aggressive translation (±128px on 1280px images)
+# → 5-10% probability of complete object removal
+# SafeAlbu gracefully skips these samples instead of crashing
+```
+
+
 ## Tips
 
 **GPU Memory Issues?**
